@@ -119,6 +119,13 @@ boolean Plugin_085(byte function, struct EventStruct *event, String &string) {
     break;
   }
 
+  case PLUGIN_WEBFORM_SHOW_CONFIG:
+  {
+    string += serialHelper_getSerialTypeLabel(event);
+    success = true;
+    break;
+  }
+
   case PLUGIN_SET_DEFAULTS: {
     P085_DEV_ID = P085_DEV_ID_DFLT;
     P085_MODEL = P085_MODEL_DFLT;
@@ -365,8 +372,8 @@ float p085_readValue(byte query, struct EventStruct *event) {
     case P085_QUERY_Wh_net:
     {
       int64_t intvalue = P085_data->modbus.read_32b_HoldingRegister(0x306);
-      if (intvalue >= (1<<31)) {
-        intvalue = 4294967296 - intvalue;
+      if (intvalue >= 2147483648ll) {
+        intvalue = 4294967296ll - intvalue;
       }
       float value = static_cast<float>(intvalue);
       value *= 10.0; // 0.01 kWh => Wh

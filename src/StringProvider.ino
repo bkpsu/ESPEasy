@@ -27,6 +27,9 @@ String getLabel(LabelType::Enum label) {
     case LabelType::BOOT_TYPE:              return F("Last Boot Cause");
     case LabelType::BOOT_COUNT:             return F("Boot Count");
     case LabelType::RESET_REASON:           return F("Reset Reason");
+    case LabelType::LAST_TASK_BEFORE_REBOOT: return F("Last Task");
+    case LabelType::SW_WD_COUNT:            return F("SW WD count");
+
 
     case LabelType::WIFI_CONNECTION:        return F("WiFi Connection");
     case LabelType::WIFI_RSSI:              return F("RSSI");
@@ -123,6 +126,8 @@ String getValue(LabelType::Enum label) {
     case LabelType::BOOT_TYPE:              return getLastBootCauseString();
     case LabelType::BOOT_COUNT:             break;
     case LabelType::RESET_REASON:           return getResetReasonString();
+    case LabelType::LAST_TASK_BEFORE_REBOOT: return decodeSchedulerId(lastMixedSchedulerId_beforereboot);
+    case LabelType::SW_WD_COUNT:            return String(sw_watchdog_callback_count);
 
     case LabelType::WIFI_CONNECTION:        break;
     case LabelType::WIFI_RSSI:              return String(WiFi.RSSI());
@@ -187,4 +192,71 @@ String getValue(LabelType::Enum label) {
 
   }
   return F("MissingString");
+}
+
+String getExtendedValue(LabelType::Enum label) {
+  switch (label)
+  {
+    case LabelType::UPTIME:
+    {
+      String result;
+      result.reserve(40);
+      int minutes = wdcounter / 2;
+      int days = minutes / 1440;
+      minutes = minutes % 1440;
+      int hrs = minutes / 60;
+      minutes = minutes % 60;
+
+      result += days;
+      result += F(" days ");
+      result += hrs;
+      result += F(" hours ");
+      result += minutes;
+      result += F(" minutes");
+      return result;
+    }
+
+    default:
+    break;
+  }
+  return "";
+}
+
+
+String getFileName(FileType::Enum filetype) {
+  String result;
+  switch (filetype) 
+  {
+    case FileType::CONFIG_DAT: 
+      result += F("config.dat");
+      break;
+    case FileType::NOTIFICATION_DAT:
+      result += F("notification.dat");
+      break;
+    case FileType::SECURITY_DAT:
+      result += F("security.dat");
+      break;
+    case FileType::RULES_TXT:
+      // Use getRulesFileName     
+      break;
+  }
+  return result;
+}
+
+String getFileName(FileType::Enum filetype, unsigned int filenr) {
+  if (filetype == FileType::RULES_TXT) {
+    return getRulesFileName(filenr);
+  }
+  return getFileName(filetype);
+}
+
+// filenr = 0...3 for files rules1.txt ... rules4.txt
+String getRulesFileName(unsigned int filenr) {
+  String result;
+  if (filenr < 4) {
+    result += F("rules");
+    result += filenr + 1;
+    result += F(".txt");
+  }
+  return result;
 }

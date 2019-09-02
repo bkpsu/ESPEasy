@@ -4,16 +4,17 @@
 // These element classes should be defined as class, to be used as template.
 
 /*********************************************************************************************\
- * MQTT_queue_element for all MQTT base controllers
+* MQTT_queue_element for all MQTT base controllers
 \*********************************************************************************************/
 class MQTT_queue_element {
 public:
+
   MQTT_queue_element() : controller_idx(0), _retained(false) {}
 
   MQTT_queue_element(int ctrl_idx,
-    const String& topic, const String& payload, boolean retained) :
+                     const String& topic, const String& payload, boolean retained) :
     controller_idx(ctrl_idx), _topic(topic), _payload(payload), _retained(retained)
-     {}
+  {}
 
   size_t getSize() const {
     return sizeof(this) + _topic.length() + _payload.length();
@@ -26,13 +27,15 @@ public:
 };
 
 /*********************************************************************************************\
- * Simple queue element, only storing controller index and some String
+* Simple queue element, only storing controller index and some String
 \*********************************************************************************************/
 class simple_queue_element_string_only {
 public:
+
   simple_queue_element_string_only() : controller_idx(0) {}
+
   simple_queue_element_string_only(int ctrl_idx, const String& req) :
-       controller_idx(ctrl_idx), txt(req) {}
+    controller_idx(ctrl_idx), txt(req) {}
 
   size_t getSize() const {
     return sizeof(this) + txt.length();
@@ -43,47 +46,63 @@ public:
 };
 
 
+//#ifdef USES_C001
 /*********************************************************************************************\
- * C001_queue_element for queueing requests for C001.
+* C001_queue_element for queueing requests for C001.
 \*********************************************************************************************/
 #define C001_queue_element simple_queue_element_string_only
+//#endif //USES_C001
 
+//#ifdef USES_C003
 /*********************************************************************************************\
- * C003_queue_element for queueing requests for C003 Nodo Telnet.
+* C003_queue_element for queueing requests for C003 Nodo Telnet.
 \*********************************************************************************************/
 #define C003_queue_element simple_queue_element_string_only
+//#endif //USES_C003
 
+//#ifdef USES_C004
 /*********************************************************************************************\
- * C004_queue_element for queueing requests for C004 ThingSpeak.
- *   Typical use case for Thingspeak is to only send values every N seconds/minutes.
- *   So we just store everything needed to recreate the event when the time is ready.
+* C004_queue_element for queueing requests for C004 ThingSpeak.
+*   Typical use case for Thingspeak is to only send values every N seconds/minutes.
+*   So we just store everything needed to recreate the event when the time is ready.
 \*********************************************************************************************/
 class C004_queue_element {
 public:
+
   C004_queue_element() : controller_idx(0), TaskIndex(0), idx(0), sensorType(0) {}
-  C004_queue_element(const struct EventStruct* event) :
+
+  C004_queue_element(const struct EventStruct *event) :
     controller_idx(event->ControllerIndex),
     TaskIndex(event->TaskIndex),
     idx(event->idx),
-    sensorType(event->sensorType) {}
+    sensorType(event->sensorType) {
+    if (sensorType == SENSOR_TYPE_STRING) {
+      txt = event->String2;
+    }
+  }
 
   size_t getSize() const {
-    return sizeof(this);
+    return sizeof(this) + txt.length();
   }
 
   int controller_idx;
   byte TaskIndex;
   int idx;
   byte sensorType;
+  String txt;
 };
+//#endif //USES_C004
 
+//#ifdef USES_C007
 /*********************************************************************************************\
- * C007_queue_element for queueing requests for C007 Emoncms
+* C007_queue_element for queueing requests for C007 Emoncms
 \*********************************************************************************************/
 class C007_queue_element {
 public:
+
   C007_queue_element() : controller_idx(0), TaskIndex(0), idx(0), sensorType(0) {}
-  C007_queue_element(const struct EventStruct* event) :
+
+  C007_queue_element(const struct EventStruct *event) :
     controller_idx(event->ControllerIndex),
     TaskIndex(event->TaskIndex),
     idx(event->idx),
@@ -98,15 +117,18 @@ public:
   int idx;
   byte sensorType;
 };
+//#endif //USES_C007
 
 /*********************************************************************************************\
- * Base class for controllers that only send a single value per request and thus needs to
- * keep track of the number of values already sent.
+* Base class for controllers that only send a single value per request and thus needs to
+* keep track of the number of values already sent.
 \*********************************************************************************************/
 class queue_element_single_value_base {
 public:
+
   queue_element_single_value_base() : controller_idx(0), TaskIndex(0), idx(0), valuesSent(0) {}
-  queue_element_single_value_base(const struct EventStruct* event, byte value_count) :
+
+  queue_element_single_value_base(const struct EventStruct *event, byte value_count) :
     controller_idx(event->ControllerIndex),
     TaskIndex(event->TaskIndex),
     idx(event->idx),
@@ -114,12 +136,13 @@ public:
     valueCount(value_count) {}
 
   bool checkDone(bool succesfull) const {
-    if (succesfull) ++valuesSent;
-    return (valuesSent >= valueCount || valuesSent >= VARS_PER_TASK);
+    if (succesfull) { ++valuesSent; }
+    return valuesSent >= valueCount || valuesSent >= VARS_PER_TASK;
   }
 
   size_t getSize() const {
     size_t total = sizeof(this);
+
     for (int i = 0; i < VARS_PER_TASK; ++i) {
       total += txt[i].length();
     }
@@ -130,24 +153,29 @@ public:
   int controller_idx;
   byte TaskIndex;
   int idx;
-  mutable byte valuesSent;  // Value must be set by const function checkDone()
+  mutable byte valuesSent; // Value must be set by const function checkDone()
   byte valueCount;
 };
 
 
+//#ifdef USES_C008
 /*********************************************************************************************\
- * C008_queue_element for queueing requests for 008: Generic HTTP
- * Using queue_element_single_value_base
+* C008_queue_element for queueing requests for 008: Generic HTTP
+* Using queue_element_single_value_base
 \*********************************************************************************************/
 #define C008_queue_element queue_element_single_value_base
+//#endif //USES_C008
 
+//#ifdef USES_C009
 /*********************************************************************************************\
- * C009_queue_element for queueing requests for C009: FHEM HTTP.
+* C009_queue_element for queueing requests for C009: FHEM HTTP.
 \*********************************************************************************************/
 class C009_queue_element {
 public:
+
   C009_queue_element() : controller_idx(0), TaskIndex(0), idx(0), sensorType(0) {}
-  C009_queue_element(const struct EventStruct* event) :
+
+  C009_queue_element(const struct EventStruct *event) :
     controller_idx(event->ControllerIndex),
     TaskIndex(event->TaskIndex),
     idx(event->idx),
@@ -155,6 +183,7 @@ public:
 
   size_t getSize() const {
     size_t total = sizeof(this);
+
     for (int i = 0; i < VARS_PER_TASK; ++i) {
       total += txt[i].length();
     }
@@ -167,33 +196,85 @@ public:
   int idx;
   byte sensorType;
 };
+//#endif //USES_C009
 
 
+//#ifdef USES_C010
 /*********************************************************************************************\
- * C010_queue_element for queueing requests for 010: Generic UDP
- * Using queue_element_single_value_base
+* C010_queue_element for queueing requests for 010: Generic UDP
+* Using queue_element_single_value_base
 \*********************************************************************************************/
 #define C010_queue_element queue_element_single_value_base
+//#endif //USES_C010
 
+//#ifdef USES_C011
 /*********************************************************************************************\
- * C011_queue_element for queueing requests for 011: Generic HTTP Advanced
+* C011_queue_element for queueing requests for 011: Generic HTTP Advanced
 \*********************************************************************************************/
 #define C011_queue_element simple_queue_element_string_only
+//#endif //USES_C011
 
+//#ifdef USES_C012
 /*********************************************************************************************\
- * C012_queue_element for queueing requests for 012: Blynk
- * Using queue_element_single_value_base
+* C012_queue_element for queueing requests for 012: Blynk
+* Using queue_element_single_value_base
 \*********************************************************************************************/
 #define C012_queue_element queue_element_single_value_base
+//#endif //USES_C012
 
-
+//#ifdef USES_C015
 /*********************************************************************************************\
- * C016_queue_element for queueing requests for C016: Cached HTTP.
+* C015_queue_element for queueing requests for 015: Blynk
+* Using queue_element_single_value_base
+\*********************************************************************************************/
+
+// #define C015_queue_element queue_element_single_value_base
+class C015_queue_element {
+public:
+
+  C015_queue_element() : controller_idx(0), TaskIndex(0), idx(0), valuesSent(0) {}
+
+  C015_queue_element(const struct EventStruct *event, byte value_count) :
+    controller_idx(event->ControllerIndex),
+    TaskIndex(event->TaskIndex),
+    idx(event->idx),
+    valuesSent(0),
+    valueCount(value_count) {}
+
+  bool checkDone(bool succesfull) const {
+    if (succesfull) { ++valuesSent; }
+    return valuesSent >= valueCount || valuesSent >= VARS_PER_TASK;
+  }
+
+  size_t getSize() const {
+    size_t total = sizeof(this);
+
+    for (int i = 0; i < VARS_PER_TASK; ++i) {
+      total += txt[i].length();
+    }
+    return total;
+  }
+
+  String txt[VARS_PER_TASK];
+  int vPin[VARS_PER_TASK] = {0};
+  int controller_idx;
+  byte TaskIndex;
+  int idx;
+  mutable byte valuesSent; // Value must be set by const function checkDone()
+  byte valueCount;
+};
+//#endif //USES_C015
+
+//#ifdef USES_C016
+/*********************************************************************************************\
+* C016_queue_element for queueing requests for C016: Cached HTTP.
 \*********************************************************************************************/
 class C016_queue_element {
 public:
-  C016_queue_element() : controller_idx(0), TaskIndex(0), sensorType(0) {}
-  C016_queue_element(const struct EventStruct* event, byte value_count, unsigned long unixTime) :
+
+  C016_queue_element() : timestamp(0), controller_idx(0), TaskIndex(0), sensorType(0) {}
+
+  C016_queue_element(const struct EventStruct *event, byte value_count, unsigned long unixTime) :
     timestamp(unixTime),
     controller_idx(event->ControllerIndex),
     TaskIndex(event->TaskIndex),
@@ -201,6 +282,7 @@ public:
     valueCount(value_count)
   {
     const byte BaseVarIndex = TaskIndex * VARS_PER_TASK;
+
     for (byte i = 0; i < VARS_PER_TASK; ++i) {
       if (i < value_count) {
         values[i] = UserVar[BaseVarIndex + i];
@@ -215,53 +297,122 @@ public:
   }
 
   float values[VARS_PER_TASK];
-  unsigned long timestamp;  // Unix timestamp
+  unsigned long timestamp; // Unix timestamp
   byte controller_idx;
   byte TaskIndex;
   byte sensorType;
   byte valueCount;
 };
 
+//#endif //USES_C016
 
+//#ifdef USES_C017
+/*********************************************************************************************\
+* C017_queue_element for queueing requests for C017: Zabbix Trapper Protocol.
+\*********************************************************************************************/
+class C017_queue_element {
+public:
+
+  C017_queue_element() : controller_idx(0), TaskIndex(0), idx(0), sensorType(0) {}
+
+  C017_queue_element(const struct EventStruct *event) :
+    controller_idx(event->ControllerIndex),
+    TaskIndex(event->TaskIndex),
+    idx(event->idx),
+    sensorType(event->sensorType) {}
+
+  size_t getSize() const {
+    size_t total = sizeof(this);
+
+    for (int i = 0; i < VARS_PER_TASK; ++i) {
+      total += txt[i].length();
+    }
+    return total;
+  }
+
+  String txt[VARS_PER_TASK];
+  int controller_idx;
+  byte TaskIndex;
+  int idx;
+  byte sensorType;
+};
+//#endif //USES_C017
+
+//#ifdef USES_C018
+/*********************************************************************************************\
+* C018_queue_element for queueing requests for C018: TTN/RN2483
+\*********************************************************************************************/
+
+
+
+class C018_queue_element {
+public:
+
+  C018_queue_element() {}
+
+  C018_queue_element(struct EventStruct *event, uint8_t sampleSetCount) :
+    controller_idx(event->ControllerIndex)
+  {
+    #ifdef USES_PACKED_RAW_DATA
+    packed = getPackedFromPlugin(event, sampleSetCount);
+    #endif // USES_PACKED_RAW_DATA
+  }
+
+  size_t getSize() const {
+    return sizeof(this) + packed.length();
+  }
+
+  int controller_idx = 0;
+  String packed;
+};
+
+//#endif //USES_C018
 
 /*********************************************************************************************\
- * ControllerDelayHandlerStruct
+* ControllerDelayHandlerStruct
 \*********************************************************************************************/
 template<class T>
 struct ControllerDelayHandlerStruct {
   ControllerDelayHandlerStruct() :
-      lastSend(0),
-      minTimeBetweenMessages(CONTROLLER_DELAY_QUEUE_DELAY_DFLT),
-      max_queue_depth(CONTROLLER_DELAY_QUEUE_DEPTH_DFLT),
-      attempt(0),
-      max_retries(CONTROLLER_DELAY_QUEUE_RETRY_DFLT),
-      delete_oldest(false),
-      must_check_reply(false) {}
+    lastSend(0),
+    minTimeBetweenMessages(CONTROLLER_DELAY_QUEUE_DELAY_DFLT),
+    max_queue_depth(CONTROLLER_DELAY_QUEUE_DEPTH_DFLT),
+    attempt(0),
+    max_retries(CONTROLLER_DELAY_QUEUE_RETRY_DFLT),
+    delete_oldest(false),
+    must_check_reply(false) {}
 
   void configureControllerSettings(const ControllerSettingsStruct& settings) {
     minTimeBetweenMessages = settings.MinimalTimeBetweenMessages;
-    max_queue_depth = settings.MaxQueueDepth;
-    max_retries = settings.MaxRetry;
-    delete_oldest = settings.DeleteOldest;
-    must_check_reply = settings.MustCheckReply;
+    max_queue_depth        = settings.MaxQueueDepth;
+    max_retries            = settings.MaxRetry;
+    delete_oldest          = settings.DeleteOldest;
+    must_check_reply       = settings.MustCheckReply;
+
     // Set some sound limits when not configured
-    if (max_queue_depth == 0) max_queue_depth = CONTROLLER_DELAY_QUEUE_DEPTH_DFLT;
-    if (max_retries == 0) max_retries = CONTROLLER_DELAY_QUEUE_RETRY_DFLT;
-    if (minTimeBetweenMessages == 0) minTimeBetweenMessages = CONTROLLER_DELAY_QUEUE_DELAY_DFLT;
+    if (max_queue_depth == 0) { max_queue_depth = CONTROLLER_DELAY_QUEUE_DEPTH_DFLT; }
+
+    if (max_retries == 0) { max_retries = CONTROLLER_DELAY_QUEUE_RETRY_DFLT; }
+
+    if (minTimeBetweenMessages == 0) { minTimeBetweenMessages = CONTROLLER_DELAY_QUEUE_DELAY_DFLT; }
+
     // No less than 10 msec between messages.
-    if (minTimeBetweenMessages < 10) minTimeBetweenMessages = 10;
+    if (minTimeBetweenMessages < 10) { minTimeBetweenMessages = 10; }
   }
 
   bool queueFull(const T& element) const {
-    if (sendQueue.size() >= max_queue_depth) return true;
+    if (sendQueue.size() >= max_queue_depth) { return true; }
 
     // Number of elements is not exceeding the limit, check memory
     int freeHeap = ESP.getFreeHeap();
-    if (freeHeap > 5000) return false; // Memory is not an issue.
+
+    if (freeHeap > 5000) { return false; // Memory is not an issue.
+    }
 #ifndef BUILD_NO_DEBUG
+
     if (loglevelActiveFor(LOG_LEVEL_DEBUG)) {
       String log = "Controller-";
-      log += element.controller_idx +1;
+      log += element.controller_idx + 1;
       log += " : Memory used: ";
       log += getQueueMemorySize();
       log += " bytes ";
@@ -271,7 +422,7 @@ struct ControllerDelayHandlerStruct {
       log += " free";
       addLog(LOG_LEVEL_DEBUG, log);
     }
-#endif
+#endif // ifndef BUILD_NO_DEBUG
     return true;
   }
 
@@ -287,28 +438,32 @@ struct ControllerDelayHandlerStruct {
       sendQueue.emplace_back(element);
       return true;
     }
+
     if (!queueFull(element)) {
       sendQueue.emplace_back(element);
       return true;
     }
 #ifndef BUILD_NO_DEBUG
+
     if (loglevelActiveFor(LOG_LEVEL_DEBUG)) {
       String log = get_formatted_Controller_number(element.controller_idx);
       log += " : queue full";
       addLog(LOG_LEVEL_DEBUG, log);
     }
-#endif
+#endif // ifndef BUILD_NO_DEBUG
     return false;
   }
 
   // Get the next element.
   // Remove front element when max_retries is reached.
   T* getNext() {
-    if (sendQueue.empty()) return NULL;
+    if (sendQueue.empty()) { return NULL; }
+
     if (attempt > max_retries) {
       sendQueue.pop_front();
       attempt = 0;
-      if (sendQueue.empty()) return NULL;
+
+      if (sendQueue.empty()) { return NULL; }
     }
     return &sendQueue.front();
   }
@@ -317,7 +472,8 @@ struct ControllerDelayHandlerStruct {
   // Return 0 when nothing to process.
   // @param remove_from_queue indicates whether the elements should be removed from the queue.
   unsigned long markProcessed(bool remove_from_queue) {
-    if (sendQueue.empty()) return 0;
+    if (sendQueue.empty()) { return 0; }
+
     if (remove_from_queue) {
       sendQueue.pop_front();
       attempt = 0;
@@ -329,37 +485,44 @@ struct ControllerDelayHandlerStruct {
   }
 
   unsigned long getNextScheduleTime() const {
-    if (sendQueue.empty()) return 0;
+    if (sendQueue.empty()) { return 0; }
     unsigned long nextTime = lastSend + minTimeBetweenMessages;
+
     if (timePassedSince(nextTime) > 0) {
       nextTime = millis();
     }
-    if (nextTime == 0) nextTime = 1; // Just to make sure it will be executed
+
+    if (nextTime == 0) { nextTime = 1; // Just to make sure it will be executed
+    }
     return nextTime;
   }
 
   size_t getQueueMemorySize() const {
     size_t totalSize = 0;
+
     for (auto it = sendQueue.begin(); it != sendQueue.end(); ++it) {
       totalSize += it->getSize();
     }
     return totalSize;
   }
 
-  std::list<T> sendQueue;
+  std::list<T>  sendQueue;
   unsigned long lastSend;
-  unsigned int minTimeBetweenMessages;
-  byte max_queue_depth;
-  byte attempt;
-  byte max_retries;
-  bool delete_oldest;
-  bool must_check_reply;
+  unsigned int  minTimeBetweenMessages;
+  byte          max_queue_depth;
+  byte          attempt;
+  byte          max_retries;
+  bool          delete_oldest;
+  bool          must_check_reply;
 };
 
 ControllerDelayHandlerStruct<MQTT_queue_element> MQTTDelayHandler;
 
+// Uncrustify must not be used on macros, so turn it off.
+// *INDENT-OFF*
 
-// This macro defines the code needed to create the 'process_c##NNN##_delay_queue()'
+
+// This macro defines the code needed to create the 'process_c##NNN####M##_delay_queue()'
 // function and all needed objects and forward declarations.
 // It is a macro to prevent common typo errors.
 // This function will perform the (re)scheduling and mark if it is processed (and can be removed)
@@ -369,130 +532,145 @@ ControllerDelayHandlerStruct<MQTT_queue_element> MQTTDelayHandler;
 // N.B. some controllers only can send one value per iteration, so a returned "false" can mean it
 //      was still successful. The controller should keep track of the last value sent
 //      in the element stored in the queue.
-#define DEFINE_Cxxx_DELAY_QUEUE_MACRO(NNN, M) \
-                ControllerDelayHandlerStruct<C##NNN##_queue_element> C##NNN##_DelayHandler; \
-                bool do_process_c##NNN##_delay_queue(int controller_number, const C##NNN##_queue_element& element, ControllerSettingsStruct& ControllerSettings); \
-                void process_c##NNN##_delay_queue() { \
-                  C##NNN##_queue_element* element(C##NNN##_DelayHandler.getNext()); \
-                  if (element == NULL) return; \
-                  MakeControllerSettings(ControllerSettings); \
-                  LoadControllerSettings(element->controller_idx, ControllerSettings); \
-                  C##NNN##_DelayHandler.configureControllerSettings(ControllerSettings); \
-                  if (!WiFiConnected(10)) { \
-                    scheduleNextDelayQueue(TIMER_C##NNN##_DELAY_QUEUE, C##NNN##_DelayHandler.getNextScheduleTime()); \
-                    return; \
-                  } \
-                  START_TIMER; \
-                  C##NNN##_DelayHandler.markProcessed(do_process_c##NNN##_delay_queue(M, *element, ControllerSettings)); \
-                  STOP_TIMER(C##NNN##_DELAY_QUEUE); \
-                  scheduleNextDelayQueue(TIMER_C##NNN##_DELAY_QUEUE, C##NNN##_DelayHandler.getNextScheduleTime()); \
-                }
+#define DEFINE_Cxxx_DELAY_QUEUE_MACRO(NNN, M)                                                                        \
+  ControllerDelayHandlerStruct<C##NNN####M##_queue_element>C##NNN####M##_DelayHandler;                               \
+  bool do_process_c##NNN####M##_delay_queue(int controller_number,                                                   \
+                                           const C##NNN####M##_queue_element & element,                              \
+                                           ControllerSettingsStruct & ControllerSettings);                           \
+  void process_c##NNN####M##_delay_queue() {                                                                         \
+    C##NNN####M##_queue_element *element(C##NNN####M##_DelayHandler.getNext());                                      \
+    if (element == NULL) return;                                                                                     \
+    MakeControllerSettings (ControllerSettings);                                                                     \
+    LoadControllerSettings(element->controller_idx, ControllerSettings);                                             \
+    C##NNN####M##_DelayHandler.configureControllerSettings(ControllerSettings);                                      \
+    if (!WiFiConnected(10)) {                                                                                        \
+      scheduleNextDelayQueue(TIMER_C##NNN####M##_DELAY_QUEUE, C##NNN####M##_DelayHandler.getNextScheduleTime());     \
+      return;                                                                                                        \
+    }                                                                                                                \
+    START_TIMER;                                                                                                     \
+    C##NNN####M##_DelayHandler.markProcessed(do_process_c##NNN####M##_delay_queue(M, *element, ControllerSettings)); \
+    STOP_TIMER(C##NNN####M##_DELAY_QUEUE);                                                                           \
+    scheduleNextDelayQueue(TIMER_C##NNN####M##_DELAY_QUEUE, C##NNN####M##_DelayHandler.getNextScheduleTime());       \
+  }
 
 // Define the function wrappers to handle the calling to Cxxx_DelayHandler etc.
 // If someone knows how to add leading zeros in macros, please be my guest :)
 #ifdef USES_C001
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(001, 1)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(00,  1)
+#endif // ifdef USES_C001
 #ifdef USES_C003
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(003, 3)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(00,  3)
+#endif // ifdef USES_C003
 #ifdef USES_C004
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(004, 4)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(00,  4)
+#endif // ifdef USES_C004
 #ifdef USES_C007
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(007, 7)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(00,  7)
+#endif // ifdef USES_C007
 #ifdef USES_C008
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(008, 8)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(00, 8)
+#endif // ifdef USES_C008
 #ifdef USES_C009
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(009, 9)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(00, 9)
+#endif // ifdef USES_C009
 #ifdef USES_C010
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(010, 10)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(0,  10)
+#endif // ifdef USES_C010
 #ifdef USES_C011
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(011, 11)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(0,  11)
+#endif // ifdef USES_C011
 #ifdef USES_C012
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(012, 12)
-#endif
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(0,  12)
+#endif // ifdef USES_C012
+
 /*
-#ifdef USES_C013
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(013, 13)
-#endif
-*/
+ #ifdef USES_C013
+   DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 13)
+ #endif
+ */
+
 /*
-#ifdef USES_C014
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(014, 14)
-#endif
-*/
-/*
+ #ifdef USES_C014
+   DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 14)
+ #endif
+ */
 #ifdef USES_C015
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(015, 15)
-#endif
-*/
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 15)
+#endif // ifdef USES_C015
 
 #ifdef USES_C016
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(016, 16)
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 16)
+#endif // ifdef USES_C016
+
+
+#ifdef USES_C017
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 17)
+#endif // ifdef USES_C017
+
+#ifdef USES_C018
+DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 18)
 #endif
 
+
 /*
-#ifdef USES_C017
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(017, 17)
-#endif
-*/
+ #ifdef USES_C019
+   DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 19)
+ #endif
+ */
+
 /*
-#ifdef USES_C018
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(018, 18)
-#endif
-*/
-/*
-#ifdef USES_C019
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(019, 19)
-#endif
-*/
-/*
-#ifdef USES_C020
-  DEFINE_Cxxx_DELAY_QUEUE_MACRO(020, 20)
-#endif
-*/
+ #ifdef USES_C020
+   DEFINE_Cxxx_DELAY_QUEUE_MACRO(0, 20)
+ #endif
+ */
 
 
 // When extending this, also extend in Scheduler.ino:
 // void process_interval_timer(unsigned long id, unsigned long lasttimer)
 
+// Uncrustify must not be used on macros, but we're now done, so turn Uncrustify on again.
+// *INDENT-ON*
+
 
 /*********************************************************************************************\
- * Helper functions used in a number of controllers
+* Helper functions used in a number of controllers
 \*********************************************************************************************/
-bool safeReadStringUntil(Stream &input, String &str, char terminator, unsigned int maxSize = 1024, unsigned int timeout = 1000)
+bool safeReadStringUntil(Stream     & input,
+                         String     & str,
+                         char         terminator,
+                         unsigned int maxSize = 1024,
+                         unsigned int timeout = 1000)
 {
-	int c;
-  const unsigned long start = millis();
-	const unsigned long timer = start + timeout;
+  int c;
+  const unsigned long start           = millis();
+  const unsigned long timer           = start + timeout;
   unsigned long backgroundtasks_timer = start + 10;
-	str = "";
 
-	do {
-		//read character
+  str = "";
+
+  do {
+    // read character
     if (input.available()) {
-  		c = input.read();
-  		if (c >= 0) {
-  			//found terminator, we're ok
-  			if (c == terminator) {
-  				return(true);
-  			}
-  			//found character, add to string
-  			else{
-  				str += char(c);
-  				//string at max size?
-  				if (str.length() >= maxSize) {
-  					addLog(LOG_LEVEL_ERROR, F("Not enough bufferspace to read all input data!"));
-  					return(false);
-  				}
-  			}
-  		}
+      c = input.read();
+
+      if (c >= 0) {
+        // found terminator, we're ok
+        if (c == terminator) {
+          return true;
+        }
+
+        // found character, add to string
+        else {
+          str += char(c);
+
+          // string at max size?
+          if (str.length() >= maxSize) {
+            addLog(LOG_LEVEL_ERROR, F("Not enough bufferspace to read all input data!"));
+            return false;
+          }
+        }
+      }
+
       // We must run the backgroundtasks every now and then.
       if (timeOutReached(backgroundtasks_timer)) {
         backgroundtasks_timer += 10;
@@ -503,16 +681,17 @@ bool safeReadStringUntil(Stream &input, String &str, char terminator, unsigned i
     } else {
       delay(0);
     }
-	} while (!timeOutReached(timer));
+  } while (!timeOutReached(timer));
 
-	addLog(LOG_LEVEL_ERROR, F("Timeout while reading input data!"));
-	return(false);
+  addLog(LOG_LEVEL_ERROR, F("Timeout while reading input data!"));
+  return false;
 }
 
 bool valid_controller_number(int controller_number) {
-  if (controller_number < 0) return false;
+  if (controller_number < 0) { return false; }
   return true;
-//  return getProtocolIndex(controller_number) <= protocolCount;
+
+  //  return getProtocolIndex(controller_number) <= protocolCount;
 }
 
 String get_formatted_Controller_number(int controller_number) {
@@ -520,25 +699,40 @@ String get_formatted_Controller_number(int controller_number) {
     return F("C---");
   }
   String result = F("C");
-  if (controller_number < 100) result += '0';
-  if (controller_number < 10) result += '0';
+
+  if (controller_number < 100) { result += '0'; }
+
+  if (controller_number < 10) { result += '0'; }
   result += controller_number;
   return result;
 }
 
+
+String get_auth_header(const String& user, const String& pass) {
+  String authHeader = "";
+
+  if (user.length() != 0 && pass.length() != 0) {
+      base64 encoder;
+      String auth = user;
+      auth       += ":";
+      auth       += pass;
+      authHeader  = F("Authorization: Basic ");
+      authHeader += encoder.encode(auth);
+      authHeader += F(" \r\n");
+  }
+  return authHeader;
+}
+
 String get_auth_header(int controller_index) {
   String authHeader = "";
+
   if (controller_index < CONTROLLER_MAX) {
     if ((SecuritySettings.ControllerUser[controller_index][0] != 0) &&
         (SecuritySettings.ControllerPassword[controller_index][0] != 0))
     {
-      base64 encoder;
-      String auth = SecuritySettings.ControllerUser[controller_index];
-      auth += ":";
-      auth += SecuritySettings.ControllerPassword[controller_index];
-      authHeader = F("Authorization: Basic ");
-      authHeader += encoder.encode(auth);
-      authHeader += F(" \r\n");
+      authHeader = get_auth_header(
+        String(SecuritySettings.ControllerUser[controller_index]), 
+        String(SecuritySettings.ControllerPassword[controller_index]));
     }
   } else {
     addLog(LOG_LEVEL_ERROR, F("Invalid controller index"));
@@ -549,37 +743,41 @@ String get_auth_header(int controller_index) {
 String get_user_agent_request_header_field() {
   static unsigned int agent_size = 20;
   String request;
+
   request.reserve(agent_size);
-  request = F("User-Agent: ");
-  request += F("ESP Easy/");
-  request += BUILD;
-  request += '/';
-  request += String(CRCValues.compileDate);
-  request += ' ';
-  request += String(CRCValues.compileTime);
-  request += "\r\n";
+  request    = F("User-Agent: ");
+  request   += F("ESP Easy/");
+  request   += BUILD;
+  request   += '/';
+  request   += String(CRCValues.compileDate);
+  request   += ' ';
+  request   += String(CRCValues.compileTime);
+  request   += "\r\n";
   agent_size = request.length();
   return request;
 }
 
 String do_create_http_request(
-    const String& hostportString,
-    const String& method, const String& uri,
-    const String& auth_header, const String& additional_options,
-    int content_length) {
+  const String& hostportString,
+  const String& method, const String& uri,
+  const String& auth_header, const String& additional_options,
+  int content_length) {
   int estimated_size = hostportString.length() + method.length()
                        + uri.length() + auth_header.length()
                        + additional_options.length()
                        + 42;
-  if (content_length >= 0) estimated_size += 25;
+
+  if (content_length >= 0) { estimated_size += 25; }
   String request;
   request.reserve(estimated_size);
   request += method;
   request += ' ';
-  if (!uri.startsWith("/")) request += '/';
+
+  if (!uri.startsWith("/")) { request += '/'; }
   request += uri;
   request += F(" HTTP/1.1");
   request += "\r\n";
+
   if (content_length >= 0) {
     request += F("Content-Length: ");
     request += content_length;
@@ -595,25 +793,26 @@ String do_create_http_request(
   request += "\r\n";
 #ifndef BUILD_NO_DEBUG
   addLog(LOG_LEVEL_DEBUG, request);
-#endif
+#endif // ifndef BUILD_NO_DEBUG
   return request;
 }
 
 String do_create_http_request(
-    const String& hostportString,
-    const String& method, const String& uri) {
+  const String& hostportString,
+  const String& method, const String& uri) {
   return do_create_http_request(hostportString, method, uri,
-    "", // auth_header
-    "", // additional_options
-    -1  // content_length
-  );
+                                "", // auth_header
+                                "", // additional_options
+                                -1  // content_length
+                                );
 }
 
 String do_create_http_request(
-    int controller_number, ControllerSettingsStruct& ControllerSettings,
-    const String& method, const String& uri,
-    int content_length) {
+  int controller_number, ControllerSettingsStruct& ControllerSettings,
+  const String& method, const String& uri,
+  int content_length) {
   const bool defaultport = ControllerSettings.Port == 0 || ControllerSettings.Port == 80;
+
   return do_create_http_request(
     defaultport ? ControllerSettings.getHost() : ControllerSettings.getHostPortString(),
     method,
@@ -624,10 +823,11 @@ String do_create_http_request(
 }
 
 String create_http_request_auth(
-    int controller_number, int controller_index, ControllerSettingsStruct& ControllerSettings,
-    const String& method, const String& uri,
-    int content_length) {
+  int controller_number, int controller_index, ControllerSettingsStruct& ControllerSettings,
+  const String& method, const String& uri,
+  int content_length) {
   const bool defaultport = ControllerSettings.Port == 0 || ControllerSettings.Port == 80;
+
   return do_create_http_request(
     defaultport ? ControllerSettings.getHost() : ControllerSettings.getHostPortString(),
     method,
@@ -638,12 +838,12 @@ String create_http_request_auth(
 }
 
 String create_http_get_request(int controller_number, ControllerSettingsStruct& ControllerSettings,
-    const String& uri) {
+                               const String& uri) {
   return do_create_http_request(controller_number, ControllerSettings, F("GET"), uri, -1);
 }
 
 String create_http_request_auth(int controller_number, int controller_index, ControllerSettingsStruct& ControllerSettings,
-    const String& method, const String& uri) {
+                                const String& method, const String& uri) {
   return create_http_request_auth(controller_number, controller_index, ControllerSettings, method, uri, -1);
 }
 
@@ -657,7 +857,8 @@ void log_connecting_to(const String& prefix, int controller_number, ControllerSe
     addLog(LOG_LEVEL_DEBUG, log);
   }
 }
-#endif
+
+#endif // ifndef BUILD_NO_DEBUG
 
 void log_connecting_fail(const String& prefix, int controller_number, ControllerSettingsStruct& ControllerSettings) {
   if (loglevelActiveFor(LOG_LEVEL_ERROR)) {
@@ -680,36 +881,41 @@ bool count_connection_results(bool success, const String& prefix, int controller
     return false;
   }
   statusLED(true);
-  if (connectionFailures)
+
+  if (connectionFailures) {
     connectionFailures--;
+  }
   return true;
 }
 
 bool try_connect_host(int controller_number, WiFiUDP& client, ControllerSettingsStruct& ControllerSettings) {
   START_TIMER;
+  if (!WiFiConnected()) return false;
   client.setTimeout(ControllerSettings.ClientTimeout);
 #ifndef BUILD_NO_DEBUG
   log_connecting_to(F("UDP  : "), controller_number, ControllerSettings);
-#endif
-  bool success = ControllerSettings.beginPacket(client) != 0;
+#endif // ifndef BUILD_NO_DEBUG
+  bool success      = ControllerSettings.beginPacket(client) != 0;
   const bool result = count_connection_results(
-      success,
-      F("UDP  : "), controller_number, ControllerSettings);
+    success,
+    F("UDP  : "), controller_number, ControllerSettings);
   STOP_TIMER(TRY_CONNECT_HOST_UDP);
   return result;
 }
 
 bool try_connect_host(int controller_number, WiFiClient& client, ControllerSettingsStruct& ControllerSettings) {
   START_TIMER;
+  if (!WiFiConnected()) return false;
+
   // Use WiFiClient class to create TCP connections
   client.setTimeout(ControllerSettings.ClientTimeout);
 #ifndef BUILD_NO_DEBUG
   log_connecting_to(F("HTTP : "), controller_number, ControllerSettings);
-#endif
-  bool success = ControllerSettings.connectToHost(client);
+#endif // ifndef BUILD_NO_DEBUG
+  bool success      = ControllerSettings.connectToHost(client);
   const bool result = count_connection_results(
-      success,
-      F("HTTP : "), controller_number, ControllerSettings);
+    success,
+    F("HTTP : "), controller_number, ControllerSettings);
   STOP_TIMER(TRY_CONNECT_HOST_TCP);
   return result;
 }
@@ -724,13 +930,17 @@ bool client_available(WiFiClient& client) {
 
 bool send_via_http(const String& logIdentifier, WiFiClient& client, const String& postStr, bool must_check_reply) {
   bool success = !must_check_reply;
+
   // This will send the request to the server
   byte written = client.print(postStr);
-  // as of 2018/11/01 the print function only returns one byte (upd to 256 chars sent). However if the string sent can be longer than this therefore we calculate modulo 256.
+
+  // as of 2018/11/01 the print function only returns one byte (upd to 256 chars sent). However if the string sent can be longer than this
+  // therefore we calculate modulo 256.
   // see discussion here https://github.com/letscontrolit/ESPEasy/pull/1979
-  // and implementation here https://github.com/esp8266/Arduino/blob/561426c0c77e9d05708f2c4bf2a956d3552a3706/libraries/ESP8266WiFi/src/include/ClientContext.h#L437-L467
+  // and implementation here
+  // https://github.com/esp8266/Arduino/blob/561426c0c77e9d05708f2c4bf2a956d3552a3706/libraries/ESP8266WiFi/src/include/ClientContext.h#L437-L467
   // this needs to be adjusted if the WiFiClient.print method changes.
-  if (written != (postStr.length()%256)) {
+  if (written != (postStr.length() % 256)) {
     if (loglevelActiveFor(LOG_LEVEL_ERROR)) {
       String log = F("HTTP : ");
       log += logIdentifier;
@@ -744,7 +954,7 @@ bool send_via_http(const String& logIdentifier, WiFiClient& client, const String
     success = false;
   }
 #ifndef BUILD_NO_DEBUG
-    else {
+  else {
     if (loglevelActiveFor(LOG_LEVEL_DEBUG)) {
       String log = F("HTTP : ");
       log += logIdentifier;
@@ -756,12 +966,13 @@ bool send_via_http(const String& logIdentifier, WiFiClient& client, const String
       addLog(LOG_LEVEL_DEBUG, log);
     }
   }
-#endif
+#endif // ifndef BUILD_NO_DEBUG
 
   if (must_check_reply) {
     unsigned long timer = millis() + 200;
+
     while (!client_available(client)) {
-      if (timeOutReached(timer)) return false;
+      if (timeOutReached(timer)) { return false; }
       delay(1);
     }
 
@@ -772,6 +983,7 @@ bool send_via_http(const String& logIdentifier, WiFiClient& client, const String
       safeReadStringUntil(client, line, '\n');
 
 #ifndef BUILD_NO_DEBUG
+
       if (loglevelActiveFor(LOG_LEVEL_DEBUG_MORE)) {
         if (line.length() > 80) {
           addLog(LOG_LEVEL_DEBUG_MORE, line.substring(0, 80));
@@ -779,10 +991,12 @@ bool send_via_http(const String& logIdentifier, WiFiClient& client, const String
           addLog(LOG_LEVEL_DEBUG_MORE, line);
         }
       }
-#endif
+#endif // ifndef BUILD_NO_DEBUG
+
       if (line.startsWith(F("HTTP/1.1 2")))
       {
         success = true;
+
         // Leave this debug info in the build, regardless of the
         // BUILD_NO_DEBUG flags.
         if (loglevelActiveFor(LOG_LEVEL_DEBUG)) {
@@ -802,19 +1016,20 @@ bool send_via_http(const String& logIdentifier, WiFiClient& client, const String
         }
 #ifndef BUILD_NO_DEBUG
         addLog(LOG_LEVEL_DEBUG_MORE, postStr);
-#endif
+#endif // ifndef BUILD_NO_DEBUG
       }
       delay(0);
     }
   }
 #ifndef BUILD_NO_DEBUG
+
   if (loglevelActiveFor(LOG_LEVEL_DEBUG)) {
     String log = F("HTTP : ");
     log += logIdentifier;
     log += F(" closing connection");
     addLog(LOG_LEVEL_DEBUG, log);
   }
-#endif
+#endif // ifndef BUILD_NO_DEBUG
 
   client.flush();
   client.stop();
@@ -824,6 +1039,5 @@ bool send_via_http(const String& logIdentifier, WiFiClient& client, const String
 bool send_via_http(int controller_number, WiFiClient& client, const String& postStr, bool must_check_reply) {
   return send_via_http(get_formatted_Controller_number(controller_number), client, postStr, must_check_reply);
 }
-
 
 #endif // CPLUGIN_HELPER_H

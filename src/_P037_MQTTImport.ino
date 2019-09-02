@@ -21,9 +21,11 @@
 // Declare a Wifi client for this plugin only
 
 // TODO TD-er: These must be kept in some vector to allow multiple instances of MQTT import.
+#ifdef USES_MQTT
 WiFiClient espclient_037;
 PubSubClient *MQTTclient_037 = NULL;
 bool MQTTclient_037_connected = false;
+#endif //USES_MQTT
 int reconnectCount = 0;
 
 String getClientName() {
@@ -172,6 +174,7 @@ boolean Plugin_037(byte function, struct EventStruct *event, String& string)
             success = true;
           }
         }
+		break;
       }
 
     case PLUGIN_TEN_PER_SECOND:

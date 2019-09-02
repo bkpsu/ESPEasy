@@ -37,8 +37,10 @@ bool CPlugin_012(byte function, struct EventStruct *event, String& string)
         // Collect the values at the same run, to make sure all are from the same sample
         byte valueCount = getValueCountFromSensorType(event->sensorType);
         C012_queue_element element(event, valueCount);
-        if (ExtraTaskSettings.TaskIndex != event->TaskIndex)
-          PluginCall(PLUGIN_GET_DEVICEVALUENAMES, event, dummyString);
+        if (ExtraTaskSettings.TaskIndex != event->TaskIndex) {
+          String dummy;
+          PluginCall(PLUGIN_GET_DEVICEVALUENAMES, event, dummy);
+        }
 
         MakeControllerSettings(ControllerSettings);
         LoadControllerSettings(event->ControllerIndex, ControllerSettings);
@@ -81,7 +83,7 @@ bool do_process_c012_delay_queue(int controller_number, const C012_queue_element
     if (element.checkDone(true))
       return true;
   }
-  if (wifiStatus != ESPEASY_WIFI_SERVICES_INITIALIZED) {
+  if (!WiFiConnected()) {
     return false;
   }
   return element.checkDone(Blynk_get(element.txt[element.valuesSent], element.controller_idx));
