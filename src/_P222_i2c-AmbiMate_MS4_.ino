@@ -48,6 +48,7 @@
 uint8_t _i2caddrP222;  //Sensor I2C Address
 uint8_t opt_sensors;   //Optional Sensors byte
 bool good;
+int motion;
 
 boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 {
@@ -79,10 +80,40 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 
     case PLUGIN_GET_DEVICEVALUENAMES:
       {
-        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[0], PSTR(PLUGIN_VALUENAME1_222));
-        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[1], PSTR(PLUGIN_VALUENAME2_222));
-        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[2], PSTR(PLUGIN_VALUENAME3_222));
-        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[3], PSTR(PLUGIN_VALUENAME4_222));
+
+        for (int i=0; i<4; i++){
+          switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
+          { case 0: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME1_222));
+              break;}
+            case 1: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME2_222));
+              break;}
+            case 2: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME3_222));
+              break;}
+            case 3: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME4_222));
+              break;}
+            case 4: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME5_222));
+              break;}
+            case 5: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME6_222));
+              break;}
+            case 6: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME7_222));
+              break;}
+            case 7: {
+              strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[i],PSTR(PLUGIN_VALUENAME8_222));
+              break;}
+          }
+        }
+
+//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[0], "value1"); //PSTR(PLUGIN_VALUENAME1_222));
+//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[1], "value2"); //PSTR(PLUGIN_VALUENAME2_222));
+//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[2], "value3"); //PSTR(PLUGIN_VALUENAME3_222));
+//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[3], "value4"); //PSTR(PLUGIN_VALUENAME4_222));
         //strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[4], PSTR(PLUGIN_VALUENAME5_222));
         //strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[5], PSTR(PLUGIN_VALUENAME6_222));
         //strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[6], PSTR(PLUGIN_VALUENAME7_222));
@@ -116,10 +147,29 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 
     case PLUGIN_WEBFORM_LOAD:
       {
+        byte sensor_1_value = Settings.TaskDevicePluginConfig[event->TaskIndex][0];
+        byte sensor_2_value = Settings.TaskDevicePluginConfig[event->TaskIndex][1];
+        byte sensor_3_value = Settings.TaskDevicePluginConfig[event->TaskIndex][2];
+        byte sensor_4_value = Settings.TaskDevicePluginConfig[event->TaskIndex][3];
 
         addFormSeparator(2);
 
         addFormCheckBox(F("Use Celsius"), F("p222_Celsius"), PCONFIG(0));
+
+        addFormSeparator(2);
+
+          String options_query[8] = { F("Temperature"),
+                                       F("Humidity"),
+                                       F("Light"),
+                                       F("Motion"),
+                                       F("Power"),
+                                       F("Audio"),
+                                       F("CO2"),
+                                       F("VOC")  };
+          addFormSelector(F("Sensor 1 Value"), F("p222_sensor1value"), 8, options_query, NULL, sensor_1_value );
+          addFormSelector(F("Sensor 2 Value"), F("p222_sensor2value"), 8, options_query, NULL, sensor_2_value );
+          addFormSelector(F("Sensor 3 Value"), F("p222_sensor3value"), 8, options_query, NULL, sensor_3_value );
+          addFormSelector(F("Sensor 4 Value"), F("p222_sensor4value"), 8, options_query, NULL, sensor_4_value );
 
         addFormSeparator(2);
 
@@ -132,25 +182,40 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 
         PCONFIG(0) = isFormItemChecked(F("p222_Celsius"));
 
+        Settings.TaskDevicePluginConfig[event->TaskIndex][0] = getFormItemInt(F("p222_sensor1value"));
+        Settings.TaskDevicePluginConfig[event->TaskIndex][1] = getFormItemInt(F("p222_sensor2value"));
+        Settings.TaskDevicePluginConfig[event->TaskIndex][2] = getFormItemInt(F("p222_sensor3value"));
+        Settings.TaskDevicePluginConfig[event->TaskIndex][3] = getFormItemInt(F("p222_sensor4value"));
+
         success = true;
         break;
       }
 
-    case PLUGIN_ONCE_A_SECOND: //For motion event processing
+    case PLUGIN_TEN_PER_SECOND: //For motion event processing
       {
         uint8_t statusByte;
         good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_PIR_ONLY);
-        delayBackground(100);
+        delay(100);
         statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
 
         if (statusByte & 0x80){ // PIR Event occurred
-          UserVar[event->BaseVarIndex + 3] = 1;
+          motion = 1; //UserVar[event->BaseVarIndex + 3] = 1;
           String log = F("AmbiMate: PIR_MOTION_EVENT");
           addLog(LOG_LEVEL_INFO, log);
           sendData(event);
         }
         else{
-          UserVar[event->BaseVarIndex + 3] = 0;
+          motion = 0; //UserVar[event->BaseVarIndex + 3] = 0;
+        }
+
+        for (int i=0; i<4; i++){
+          if(Settings.TaskDevicePluginConfig[event->TaskIndex][i] == 3) //Motion sensor selected
+            {
+              UserVar[event->BaseVarIndex + i] = (int)motion;
+              String log = F("AmbiMate: Motion: ");
+              log += motion;
+              addLog(LOG_LEVEL_INFO, log);
+            }
         }
 
         success = true;
@@ -172,7 +237,7 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
         }
 
         // 100ms delay
-        delayBackground(100);
+        delay(100);
 
         // Read Sensors next byte
         good = I2C_write8(_i2caddrP222, AMBIMATESENSOR_READ_SENSORS);
@@ -198,31 +263,31 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
         unsigned int voc_ppm = (buf[13] * 256.0 + buf[14]);
 
         String log = F("AmbiMate: Address: 0x");
-        log += String(_i2caddrP222,HEX);
-        addLog(LOG_LEVEL_INFO, log);
-        log = F("AmbiMate: Temperature: ");
-        if(PCONFIG(0))
-        {
-          log += temperatureC;
-          UserVar[event->BaseVarIndex] = (float)temperatureC;
-        }
-        else{
-          log += temperatureF;
-          UserVar[event->BaseVarIndex] = (float)temperatureF;
-        }
-        addLog(LOG_LEVEL_INFO, log);
-        log = F("AmbiMate: Humidity: ");
-        log += Humidity;
-        UserVar[event->BaseVarIndex + 1] = (float)Humidity;
-        addLog(LOG_LEVEL_INFO, log);
-        log = F("AmbiMate: Light: ");
-        log += light;
-        UserVar[event->BaseVarIndex + 2] = (float)light;
-        addLog(LOG_LEVEL_INFO, log);
+   //     log += String(_i2caddrP222,HEX);
+   //     addLog(LOG_LEVEL_INFO, log);
+   //     log = F("AmbiMate: Temperature: ");
+//         if(PCONFIG(0))
+//         {
+//           log += temperatureC;
+// //          UserVar[event->BaseVarIndex] = (float)temperatureC;
+//         }
+//         else{
+//           log += temperatureF;
+// //          UserVar[event->BaseVarIndex] = (float)temperatureF;
+//         }
+        // addLog(LOG_LEVEL_INFO, log);
+        // log = F("AmbiMate: Humidity: ");
+        // log += Humidity;
+//        UserVar[event->BaseVarIndex + 1] = (float)Humidity;
+//         addLog(LOG_LEVEL_INFO, log);
+//         log = F("AmbiMate: Light: ");
+//         log += light;
+// //        UserVar[event->BaseVarIndex + 2] = (float)light;
+//         addLog(LOG_LEVEL_INFO, log);
 
-        log = F("AmbiMate: Power: ");
-        log += batVolts;
-        addLog(LOG_LEVEL_INFO, log);
+//         log = F("AmbiMate: Power: ");
+//         log += batVolts;
+//         addLog(LOG_LEVEL_INFO, log);
         // if (status & 0x80){ // PIR Event occurred
         //   UserVar[event->BaseVarIndex + 3] = 1;
         //   log = F("AmbiMate: PIR_MOTION_EVENT");
@@ -236,6 +301,59 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
         // UserVar[event->BaseVarIndex + 5] = (float)co2_ppm;
         // UserVar[event->BaseVarIndex + 6] = (float)voc_ppm;
         // UserVar[event->BaseVarIndex + 7] = (float)audio;
+
+        for(int i=0; i<4; i++)
+        {
+          switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
+          {
+            case 0: 
+            { 
+              if(PCONFIG(0)){
+                UserVar[event->BaseVarIndex + i] = (float)temperatureC;
+              }
+              else{
+                UserVar[event->BaseVarIndex + i] = (float)temperatureF;
+              }
+              break;
+            }
+            case 1:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)Humidity;
+              break;
+            }
+            case 2:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)light;
+              break;
+            }
+            case 3:
+            {
+              //UserVar[event->BaseVarIndex + i] = (int)motion;
+              break;
+            }
+            case 4:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)batVolts;
+              break;
+            }
+            case 5:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)audio;
+              break;
+            }
+            case 6:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)co2_ppm;
+              break;
+            }
+            case 7:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)voc_ppm;
+              break;
+            }
+          }
+        }
+
 
         success = true;
         break;

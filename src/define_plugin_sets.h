@@ -610,6 +610,7 @@ To create/register a plugin, you have to :
     #define USES_C009   // FHEM HTTP
     #define USES_C010   // Generic UDP
     #define USES_C013   // ESPEasy P2P network
+    #define USES_C014   // homie 3 & 4dev MQTT
 #endif
 
 
