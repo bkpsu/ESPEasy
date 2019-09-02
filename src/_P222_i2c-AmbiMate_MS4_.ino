@@ -195,7 +195,7 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
       {
         uint8_t statusByte;
         good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_PIR_ONLY);
-        delay(100);
+        delayBackground(100);
         statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
 
         if (statusByte & 0x80){ // PIR Event occurred
@@ -237,7 +237,7 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
         }
 
         // 100ms delay
-        delay(100);
+        delayBackground(100);
 
         // Read Sensors next byte
         good = I2C_write8(_i2caddrP222, AMBIMATESENSOR_READ_SENSORS);
