@@ -16,9 +16,9 @@
 #define PLUGIN_VALUENAME3_222 "Light"
 #define PLUGIN_VALUENAME4_222 "Motion"
 #define PLUGIN_VALUENAME5_222 "Power"
-#define PLUGIN_VALUENAME6_222 "CO2"
-#define PLUGIN_VALUENAME7_222 "VOC"
-#define PLUGIN_VALUENAME8_222 "Audio"
+#define PLUGIN_VALUENAME6_222 "Audio"
+#define PLUGIN_VALUENAME7_222 "CO2"
+#define PLUGIN_VALUENAME8_222 "VOC"
 
 //Default I2C Address of the sensor
 #define AMBIMATESENSOR_DEFAULT_ADDR        0x2A
@@ -48,7 +48,8 @@
 uint8_t _i2caddrP222;  //Sensor I2C Address
 uint8_t opt_sensors;   //Optional Sensors byte
 bool good;
-int motion;
+uint8_t motion;
+bool motionRead;
 
 boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 {
@@ -110,14 +111,6 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
           }
         }
 
-//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[0], "value1"); //PSTR(PLUGIN_VALUENAME1_222));
-//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[1], "value2"); //PSTR(PLUGIN_VALUENAME2_222));
-//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[2], "value3"); //PSTR(PLUGIN_VALUENAME3_222));
-//        strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[3], "value4"); //PSTR(PLUGIN_VALUENAME4_222));
-        //strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[4], PSTR(PLUGIN_VALUENAME5_222));
-        //strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[5], PSTR(PLUGIN_VALUENAME6_222));
-        //strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[6], PSTR(PLUGIN_VALUENAME7_222));
-        //strcpy_P(ExtraTaskSettings.TaskDeviceValueNames[7], PSTR(PLUGIN_VALUENAME8_222));
         break;
       }
 
@@ -193,11 +186,16 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 
     case PLUGIN_TEN_PER_SECOND: //For motion event processing
       {
-        uint8_t statusByte;
+        //uint8_t statusByte;
         good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_PIR_ONLY);
-        delayBackground(100);
-        statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
-
+        motionRead = true;
+        schedule_task_device_timer(event->TaskIndex, millis() + 80);
+        // String log = F("Reading ten per sec, timer scheduled");
+        // addLog(LOG_LEVEL_INFO, log);
+        //sendData(event);
+        //delayBackground(75);
+        //statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
+/*
         if (statusByte & 0x80){ // PIR Event occurred
           motion = 1; //UserVar[event->BaseVarIndex + 3] = 1;
           String log = F("AmbiMate: PIR_MOTION_EVENT");
@@ -217,7 +215,7 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
               addLog(LOG_LEVEL_INFO, log);
             }
         }
-
+*/
         success = true;
         break;
 
@@ -226,43 +224,132 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
       {
         unsigned char buf[20];
 
-        if (opt_sensors & 0x01) //Gas Sensor installed
-        {
-          // Read All Sensors next byte
-          good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_INCLUDE_GAS);
+        if(motionRead == true)
+        { 
+
+          uint8_t statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
+          if (statusByte & 0x80){ // PIR Event occurred
+            motion = 1; //UserVar[event->BaseVarIndex + 3] = 1;
+            // String log = F("AmbiMate: PIR_MOTION_EVENT: ");
+            // log += motion;
+            // addLog(LOG_LEVEL_INFO, log);
+            //sendData(event);
+          }
+          else{
+            //motion = 0; //UserVar[event->BaseVarIndex + 3] = 0;
+          }
+          motionRead = false;
+
+          for (int i=0; i<4; i++){
+            if(Settings.TaskDevicePluginConfig[event->TaskIndex][i] == 3) //Motion sensor selected
+              {
+                UserVar[event->BaseVarIndex + i] = (int)motion;
+                // String log = F("AmbiMate: Motion: ");
+                // log += motion;
+                // addLog(LOG_LEVEL_INFO, log);
+              }
+          }
+
         }
         else
         {
-          good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_EXCLUDE_GAS);
+          if (opt_sensors & 0x01) //Gas Sensor installed
+          {
+            // Read All Sensors next byte
+            good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_INCLUDE_GAS);
+          }
+          else
+          {
+            good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_EXCLUDE_GAS);
+          }
+
+          // 100ms delay
+          delayBackground(100);
+
+          // Read Sensors next byte
+          good = I2C_write8(_i2caddrP222, AMBIMATESENSOR_READ_SENSORS);
+
+          Wire.requestFrom(0x2A, 15);   // request bytes from slave device
+
+          // Acquire the Raw Data
+          unsigned int i = 0;
+          while (Wire.available()) { // slave may send less than requested
+            buf[i] = Wire.read(); // receive a byte as character
+            i++;
+          }
+
+          // convert the raw data to engineering units
+          //unsigned int status = buf[0];
+          float temperatureC = (buf[1] * 256.0 + buf[2]) / 10.0;
+          float temperatureF = ((temperatureC * 9.0) / 5.0) + 32.0;
+          float Humidity = (buf[3] * 256.0 + buf[4]) / 10.0;
+          float light = (buf[5] * 256.0 + buf[6]);
+          float audio = (buf[7] * 256.0 + buf[8]);
+          float batVolts = ((buf[9] * 256.0 + buf[10]) / 1024.0) * (3.3 / 0.330);
+          float co2_ppm = (buf[11] * 256.0 + buf[12]);
+          float voc_ppm = (buf[13] * 256.0 + buf[14]);
+
+
+        for(int i=0; i<4; i++)
+        {
+          switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
+          {
+            case 0: 
+            { 
+              if(PCONFIG(0)){
+                UserVar[event->BaseVarIndex + i] = (float)temperatureC;
+              }
+              else{
+                UserVar[event->BaseVarIndex + i] = (float)temperatureF;
+              }
+              break;
+            }
+            case 1:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)Humidity;
+              break;
+            }
+            case 2:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)light;
+              break;
+            }
+            case 3:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)motion;
+                String log = F("AmbiMate: Motion in case statement: ");
+                log += motion;
+                addLog(LOG_LEVEL_INFO, log);              
+              motion = 0;
+              break;
+            }
+            case 4:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)batVolts;
+              break;
+            }
+            case 5:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)audio;
+              break;
+            }
+            case 6:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)co2_ppm;
+              break;
+            }
+            case 7:
+            {
+              UserVar[event->BaseVarIndex + i] = (float)voc_ppm;
+              break;
+            }
+          }
         }
 
-        // 100ms delay
-        delayBackground(100);
 
-        // Read Sensors next byte
-        good = I2C_write8(_i2caddrP222, AMBIMATESENSOR_READ_SENSORS);
-
-        Wire.requestFrom(0x2A, 15);   // request bytes from slave device
-
-        // Acquire the Raw Data
-        unsigned int i = 0;
-        while (Wire.available()) { // slave may send less than requested
-          buf[i] = Wire.read(); // receive a byte as character
-          i++;
         }
 
-        // convert the raw data to engineering units
-        //unsigned int status = buf[0];
-        float temperatureC = (buf[1] * 256.0 + buf[2]) / 10.0;
-        float temperatureF = ((temperatureC * 9.0) / 5.0) + 32.0;
-        float Humidity = (buf[3] * 256.0 + buf[4]) / 10.0;
-        unsigned int light = (buf[5] * 256.0 + buf[6]);
-        unsigned int audio = (buf[7] * 256.0 + buf[8]);
-        float batVolts = ((buf[9] * 256.0 + buf[10]) / 1024.0) * (3.3 / 0.330);
-        unsigned int co2_ppm = (buf[11] * 256.0 + buf[12]);
-        unsigned int voc_ppm = (buf[13] * 256.0 + buf[14]);
-
-        String log = F("AmbiMate: Address: 0x");
+   //     String log = F("AmbiMate: Address: 0x");
    //     log += String(_i2caddrP222,HEX);
    //     addLog(LOG_LEVEL_INFO, log);
    //     log = F("AmbiMate: Temperature: ");
@@ -301,58 +388,6 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
         // UserVar[event->BaseVarIndex + 5] = (float)co2_ppm;
         // UserVar[event->BaseVarIndex + 6] = (float)voc_ppm;
         // UserVar[event->BaseVarIndex + 7] = (float)audio;
-
-        for(int i=0; i<4; i++)
-        {
-          switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
-          {
-            case 0: 
-            { 
-              if(PCONFIG(0)){
-                UserVar[event->BaseVarIndex + i] = (float)temperatureC;
-              }
-              else{
-                UserVar[event->BaseVarIndex + i] = (float)temperatureF;
-              }
-              break;
-            }
-            case 1:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)Humidity;
-              break;
-            }
-            case 2:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)light;
-              break;
-            }
-            case 3:
-            {
-              //UserVar[event->BaseVarIndex + i] = (int)motion;
-              break;
-            }
-            case 4:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)batVolts;
-              break;
-            }
-            case 5:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)audio;
-              break;
-            }
-            case 6:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)co2_ppm;
-              break;
-            }
-            case 7:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)voc_ppm;
-              break;
-            }
-          }
-        }
 
 
         success = true;
