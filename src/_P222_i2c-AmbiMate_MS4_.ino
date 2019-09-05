@@ -50,6 +50,8 @@ uint8_t opt_sensors;   //Optional Sensors byte
 bool good;
 uint8_t motion;
 bool motionRead;
+long stateTimer;
+uint8_t stateMachine;
 
 boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 {
@@ -186,6 +188,44 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 
     case PLUGIN_TEN_PER_SECOND: //For motion event processing
       {
+        //State machine states
+        //0 = Start (reset timer to millis(), if external timer hits go to Polling all sensors, 
+        //           else go to PIR polling)
+        //1 = Waiting (if Polling PIR was last state, wait for timer/go to Read PIR;
+        //             If Polling All Sensors was last state, wait for timer/go to Read Sensors)
+        //2 = Polling PIR (send status write, start 100 ms timer, go to waiting)
+        //3 = Read PIR (process and set UserVar; send task_timer to PLUGIN_READ; go to Start)
+        //4 = Polling All sensors (send status write, start 100 ms timer, go to waiting)
+        //5 = Read all sensors (process and set UserVar; send tast_timer to PLUGIN_READ; go to Start)
+
+        switch(stateMachine)
+        {
+          case 0: //Start
+          {
+            break;
+          }
+          case 1: // Waiting
+          {
+            break;
+          }
+          case 2: // Poll PIR
+          {
+            break;
+          }
+          case 3: // Read PIR
+          {
+            break;
+          }
+          case 4: // Polling All
+          {
+            break;
+          }
+          case 5: // Read All
+          {
+            break;
+          }
+        }
+
         good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_PIR_ONLY);
         motionRead = true;
 
