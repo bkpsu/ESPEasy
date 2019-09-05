@@ -186,57 +186,33 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 
     case PLUGIN_TEN_PER_SECOND: //For motion event processing
       {
-        //uint8_t statusByte;
         good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_PIR_ONLY);
         motionRead = true;
-        schedule_task_device_timer(event->TaskIndex, millis() + 80);
-        // String log = F("Reading ten per sec, timer scheduled");
-        // addLog(LOG_LEVEL_INFO, log);
-        //sendData(event);
-        //delayBackground(75);
-        //statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
-/*
-        if (statusByte & 0x80){ // PIR Event occurred
-          motion = 1; //UserVar[event->BaseVarIndex + 3] = 1;
-          String log = F("AmbiMate: PIR_MOTION_EVENT");
-          addLog(LOG_LEVEL_INFO, log);
-          sendData(event);
-        }
-        else{
-          motion = 0; //UserVar[event->BaseVarIndex + 3] = 0;
-        }
 
-        for (int i=0; i<4; i++){
-          if(Settings.TaskDevicePluginConfig[event->TaskIndex][i] == 3) //Motion sensor selected
-            {
-              UserVar[event->BaseVarIndex + i] = (int)motion;
-              String log = F("AmbiMate: Motion: ");
-              log += motion;
-              addLog(LOG_LEVEL_INFO, log);
-            }
-        }
-*/
-        success = true;
+        schedule_task_device_timer(event->TaskIndex, millis() + 60);
+
+        //success = false;
         break;
 
       }
+
     case PLUGIN_READ:
       {
+        success = false;
         unsigned char buf[20];
 
         if(motionRead == true)
         { 
-
           uint8_t statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
           if (statusByte & 0x80){ // PIR Event occurred
-            motion = 1; //UserVar[event->BaseVarIndex + 3] = 1;
+            motion = 1;
             // String log = F("AmbiMate: PIR_MOTION_EVENT: ");
             // log += motion;
             // addLog(LOG_LEVEL_INFO, log);
-            //sendData(event);
+            success = true;
           }
           else{
-            //motion = 0; //UserVar[event->BaseVarIndex + 3] = 0;
+              //NOP
           }
           motionRead = false;
 
@@ -290,112 +266,68 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
           float voc_ppm = (buf[13] * 256.0 + buf[14]);
 
 
-        for(int i=0; i<4; i++)
-        {
-          switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
+          for(int i=0; i<4; i++)
           {
-            case 0: 
-            { 
-              if(PCONFIG(0)){
-                UserVar[event->BaseVarIndex + i] = (float)temperatureC;
+            switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
+            {
+              case 0: 
+              { 
+                if(PCONFIG(0)){
+                  UserVar[event->BaseVarIndex + i] = (float)temperatureC;
+                }
+                else{
+                  UserVar[event->BaseVarIndex + i] = (float)temperatureF;
+                }
+                break;
               }
-              else{
-                UserVar[event->BaseVarIndex + i] = (float)temperatureF;
+              case 1:
+              {
+                UserVar[event->BaseVarIndex + i] = (float)Humidity;
+                break;
               }
-              break;
-            }
-            case 1:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)Humidity;
-              break;
-            }
-            case 2:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)light;
-              break;
-            }
-            case 3:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)motion;
-                String log = F("AmbiMate: Motion in case statement: ");
-                log += motion;
-                addLog(LOG_LEVEL_INFO, log);              
-              motion = 0;
-              break;
-            }
-            case 4:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)batVolts;
-              break;
-            }
-            case 5:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)audio;
-              break;
-            }
-            case 6:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)co2_ppm;
-              break;
-            }
-            case 7:
-            {
-              UserVar[event->BaseVarIndex + i] = (float)voc_ppm;
-              break;
+              case 2:
+              {
+                UserVar[event->BaseVarIndex + i] = (float)light;
+                break;
+              }
+              case 3:
+              {
+                UserVar[event->BaseVarIndex + i] = (float)motion;
+                  String log = F("AmbiMate: Motion in case statement: ");
+                  log += motion;
+                  addLog(LOG_LEVEL_INFO, log);              
+                motion = 0;
+                break;
+              }
+              case 4:
+              {
+                UserVar[event->BaseVarIndex + i] = (float)batVolts;
+                break;
+              }
+              case 5:
+              {
+                UserVar[event->BaseVarIndex + i] = (float)audio;
+                break;
+              }
+              case 6:
+              {
+                UserVar[event->BaseVarIndex + i] = (float)co2_ppm;
+                break;
+              }
+              case 7:
+              {
+                UserVar[event->BaseVarIndex + i] = (float)voc_ppm;
+                break;
+              }
             }
           }
+
+          success = true;
         }
 
-
-        }
-
-   //     String log = F("AmbiMate: Address: 0x");
-   //     log += String(_i2caddrP222,HEX);
-   //     addLog(LOG_LEVEL_INFO, log);
-   //     log = F("AmbiMate: Temperature: ");
-//         if(PCONFIG(0))
-//         {
-//           log += temperatureC;
-// //          UserVar[event->BaseVarIndex] = (float)temperatureC;
-//         }
-//         else{
-//           log += temperatureF;
-// //          UserVar[event->BaseVarIndex] = (float)temperatureF;
-//         }
-        // addLog(LOG_LEVEL_INFO, log);
-        // log = F("AmbiMate: Humidity: ");
-        // log += Humidity;
-//        UserVar[event->BaseVarIndex + 1] = (float)Humidity;
-//         addLog(LOG_LEVEL_INFO, log);
-//         log = F("AmbiMate: Light: ");
-//         log += light;
-// //        UserVar[event->BaseVarIndex + 2] = (float)light;
-//         addLog(LOG_LEVEL_INFO, log);
-
-//         log = F("AmbiMate: Power: ");
-//         log += batVolts;
-//         addLog(LOG_LEVEL_INFO, log);
-        // if (status & 0x80){ // PIR Event occurred
-        //   UserVar[event->BaseVarIndex + 3] = 1;
-        //   log = F("AmbiMate: PIR_MOTION_EVENT");
-        //   addLog(LOG_LEVEL_INFO, log);
-        // }
-        // else{
-        //   UserVar[event->BaseVarIndex + 3] = 0;
-        // }
-
-        // UserVar[event->BaseVarIndex + 4] = (float)batVolts;
-        // UserVar[event->BaseVarIndex + 5] = (float)co2_ppm;
-        // UserVar[event->BaseVarIndex + 6] = (float)voc_ppm;
-        // UserVar[event->BaseVarIndex + 7] = (float)audio;
-
-
-        success = true;
         break;
-
-        }
       }
-
+  }
   return success;
 }
 
