@@ -50,8 +50,18 @@ uint8_t opt_sensors;   //Optional Sensors byte
 bool good;
 uint8_t motion;
 bool motionRead;
-long stateTimer;
-uint8_t stateMachine;
+unsigned long stateTimer;
+unsigned long commTimer;
+uint8_t sensorState;
+
+enum MS4_state {
+  MS4_Start = 0,
+  MS4_Waiting,
+  MS4_Poll_PIR,
+  MS4_Read_PIR,
+  MS4_Poll_All,
+  MS4_Read_All
+};
 
 boolean Plugin_222(byte function, struct EventStruct *event, String& string)
 {
@@ -136,6 +146,8 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
         // Read Optional Sensors byte
         opt_sensors = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_OPT_SENSORS, &good);
 
+        sensorState = MS4_Start;
+
         success = true;
         break;
       }
@@ -187,88 +199,185 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
       }
 
     case PLUGIN_TEN_PER_SECOND: //For motion event processing
-      {
-        //State machine states
-        //0 = Start (reset timer to millis(), if external timer hits go to Polling all sensors, 
-        //           else go to PIR polling)
-        //1 = Waiting (if Polling PIR was last state, wait for timer/go to Read PIR;
-        //             If Polling All Sensors was last state, wait for timer/go to Read Sensors)
-        //2 = Polling PIR (send status write, start 100 ms timer, go to waiting)
-        //3 = Read PIR (process and set UserVar; send task_timer to PLUGIN_READ; go to Start)
-        //4 = Polling All sensors (send status write, start 100 ms timer, go to waiting)
-        //5 = Read all sensors (process and set UserVar; send tast_timer to PLUGIN_READ; go to Start)
+      {        
+        unsigned char buf[20];
 
-        switch(stateMachine)
+        switch(sensorState)
         {
-          case 0: //Start
+          case MS4_Start: //Start
           {
+            stateTimer = millis(); // Reset stateTimer to current time
+            sensorState = MS4_Waiting; // Go to WAITING
+              String log = F("Hit Start");
+              addLog(LOG_LEVEL_INFO, log);  
             break;
           }
-          case 1: // Waiting
+          case MS4_Waiting: // Waiting
           {
+                String log = F("Entered Waiting with stateTimer at");
+                log+=stateTimer;
+                log+=" and millis() at ";
+                log+=millis();
+                                addLog(LOG_LEVEL_INFO, log);
+            if(millis() > (stateTimer + 500))// PIR timer elapsed
+            { //Send PIR request to sensor and start comm timer
+              good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_PIR_ONLY);
+              commTimer = millis(); 
+                String log = F("Hit Waiting if statement with stateTimer at");
+                log+=stateTimer;
+                log+=" and millis() at ";
+                log+=millis();
+                addLog(LOG_LEVEL_INFO, log); 
+              sensorState = MS4_Poll_PIR; // Go to POLL PIR
+            }
+            sendData(event);
             break;
           }
-          case 2: // Poll PIR
+          case MS4_Poll_PIR: // Poll PIR
           {
+            if(millis() > (commTimer + 100)) // Commtimer elapsed
+            {
+                // String log = F("Hit PIR Poll at ");
+                // log+=millis();
+                // addLog(LOG_LEVEL_INFO, log);               
+              sensorState = MS4_Read_PIR; // Go to READ PIR
+            }
             break;
           }
-          case 3: // Read PIR
+          case MS4_Read_PIR: // Read PIR
           {
+            uint8_t statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
+            if (statusByte & 0x80){ // PIR Event occurred
+              motion = 1;
+            }
+            else
+            {
+              motion = 0;
+            }
+            for (int i=0; i<4; i++){
+            if(Settings.TaskDevicePluginConfig[event->TaskIndex][i] == 3) //Motion sensor selected
+              {
+                UserVar[event->BaseVarIndex + i] = (int)motion;
+              }
+            }
+                // String log = F("Hit PIR Read at ");
+                // log+=millis();
+                // addLog(LOG_LEVEL_INFO, log);                 
+            schedule_task_device_timer(event->TaskIndex, millis() + 10); // Send to PLUGIN_READ
             break;
           }
-          case 4: // Polling All
+          case MS4_Poll_All: // Polling All
           {
+            if(millis() > (commTimer + 100)) // Commtimer elapsed
+            {
+                String log = F("Hit Poll All");
+                addLog(LOG_LEVEL_INFO, log);               
+              sensorState = MS4_Read_All; // Go to READ ALL
+            }
             break;
           }
-          case 5: // Read All
+          case MS4_Read_All: // Read All
           {
+                String log = F("Hit Read All");
+                addLog(LOG_LEVEL_INFO, log);               
+            // Read Sensors next byte
+            good = I2C_write8(_i2caddrP222, AMBIMATESENSOR_READ_SENSORS);
+
+            Wire.requestFrom(0x2A, 15);   // request bytes from slave device
+
+            // Acquire the Raw Data
+            unsigned int i = 0;
+            while (Wire.available()) { // slave may send less than requested
+              buf[i] = Wire.read(); // receive a byte as character
+              i++;
+            }
+
+            // convert the raw data to engineering units
+            //unsigned int status = buf[0];
+            float temperatureC = (buf[1] * 256.0 + buf[2]) / 10.0;
+            float temperatureF = ((temperatureC * 9.0) / 5.0) + 32.0;
+            float Humidity = (buf[3] * 256.0 + buf[4]) / 10.0;
+            float light = (buf[5] * 256.0 + buf[6]);
+            float audio = (buf[7] * 256.0 + buf[8]);
+            float batVolts = ((buf[9] * 256.0 + buf[10]) / 1024.0) * (3.3 / 0.330);
+            float co2_ppm = (buf[11] * 256.0 + buf[12]);
+            float voc_ppm = (buf[13] * 256.0 + buf[14]);
+
+            for(int i=0; i<4; i++)
+            {
+              switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
+              {
+                case 0: 
+                { 
+                  if(PCONFIG(0)){
+                    UserVar[event->BaseVarIndex + i] = (buf[1] * 256.0 + buf[2]) / 10.0; //(float)temperatureC;
+                  }
+                  else{
+                    UserVar[event->BaseVarIndex + i] = (float)temperatureF;
+                  }
+                  break;
+                }
+                case 1:
+                {
+                  UserVar[event->BaseVarIndex + i] = (buf[3] * 256.0 + buf[4]) / 10.0; //(float)Humidity;
+                  break;
+                }
+                case 2:
+                {
+                  UserVar[event->BaseVarIndex + i] = (buf[5] * 256.0 + buf[6]); //(float)light;
+                  break;
+                }
+                case 3:
+                {
+                //   UserVar[event->BaseVarIndex + i] = (float)motion;
+                //     String log = F("AmbiMate: Motion in case statement: ");
+                //     log += motion;
+                //     addLog(LOG_LEVEL_INFO, log);              
+                //   motion = 0;
+                  break;
+                }
+                case 4:
+                {
+                  UserVar[event->BaseVarIndex + i] = (float)batVolts;
+                  break;
+                }
+                case 5:
+                {
+                  UserVar[event->BaseVarIndex + i] = (float)audio;
+                  break;
+                }
+                case 6:
+                {
+                  UserVar[event->BaseVarIndex + i] = (float)co2_ppm;
+                  break;
+                }
+                case 7:
+                {
+                  UserVar[event->BaseVarIndex + i] = (float)voc_ppm;
+                  break;
+                }
+              }
+            }
+
+            schedule_task_device_timer(event->TaskIndex, millis() + 10); // Send to PLUGIN_READ
             break;
           }
         }
 
-        good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_PIR_ONLY);
-        motionRead = true;
-
-        schedule_task_device_timer(event->TaskIndex, millis() + 60);
-
-        //success = false;
+        success = false;
         break;
-
       }
 
     case PLUGIN_READ:
       {
         success = false;
-        unsigned char buf[20];
+                String log = F("Entered PLUGIN_READ at ");
+                log+=millis();
+                addLog(LOG_LEVEL_INFO, log);   
 
-        if(motionRead == true)
-        { 
-          uint8_t statusByte = I2C_read8_reg(_i2caddrP222, AMBIMATESENSOR_GET_STATUS, &good);
-          if (statusByte & 0x80){ // PIR Event occurred
-            motion = 1;
-            // String log = F("AmbiMate: PIR_MOTION_EVENT: ");
-            // log += motion;
-            // addLog(LOG_LEVEL_INFO, log);
-            success = true;
-          }
-          else{
-              //NOP
-          }
-          motionRead = false;
-
-          for (int i=0; i<4; i++){
-            if(Settings.TaskDevicePluginConfig[event->TaskIndex][i] == 3) //Motion sensor selected
-              {
-                UserVar[event->BaseVarIndex + i] = (int)motion;
-                // String log = F("AmbiMate: Motion: ");
-                // log += motion;
-                // addLog(LOG_LEVEL_INFO, log);
-              }
-          }
-
-        }
-        else
+        if(sensorState == MS4_Waiting) // If current state is WAITING, send command for all sensors
         {
+
           if (opt_sensors & 0x01) //Gas Sensor installed
           {
             // Read All Sensors next byte
@@ -278,92 +387,21 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
           {
             good = I2C_write8_reg(_i2caddrP222, AMBIMATESENSOR_SET_SCAN_START_BYTE, AMBIMATESENSOR_READ_EXCLUDE_GAS);
           }
-
-          // 100ms delay
-          delayBackground(100);
-
-          // Read Sensors next byte
-          good = I2C_write8(_i2caddrP222, AMBIMATESENSOR_READ_SENSORS);
-
-          Wire.requestFrom(0x2A, 15);   // request bytes from slave device
-
-          // Acquire the Raw Data
-          unsigned int i = 0;
-          while (Wire.available()) { // slave may send less than requested
-            buf[i] = Wire.read(); // receive a byte as character
-            i++;
-          }
-
-          // convert the raw data to engineering units
-          //unsigned int status = buf[0];
-          float temperatureC = (buf[1] * 256.0 + buf[2]) / 10.0;
-          float temperatureF = ((temperatureC * 9.0) / 5.0) + 32.0;
-          float Humidity = (buf[3] * 256.0 + buf[4]) / 10.0;
-          float light = (buf[5] * 256.0 + buf[6]);
-          float audio = (buf[7] * 256.0 + buf[8]);
-          float batVolts = ((buf[9] * 256.0 + buf[10]) / 1024.0) * (3.3 / 0.330);
-          float co2_ppm = (buf[11] * 256.0 + buf[12]);
-          float voc_ppm = (buf[13] * 256.0 + buf[14]);
-
-
-          for(int i=0; i<4; i++)
-          {
-            switch(Settings.TaskDevicePluginConfig[event->TaskIndex][i]) //process first sensor ValueCount
-            {
-              case 0: 
-              { 
-                if(PCONFIG(0)){
-                  UserVar[event->BaseVarIndex + i] = (float)temperatureC;
-                }
-                else{
-                  UserVar[event->BaseVarIndex + i] = (float)temperatureF;
-                }
-                break;
-              }
-              case 1:
-              {
-                UserVar[event->BaseVarIndex + i] = (float)Humidity;
-                break;
-              }
-              case 2:
-              {
-                UserVar[event->BaseVarIndex + i] = (float)light;
-                break;
-              }
-              case 3:
-              {
-                UserVar[event->BaseVarIndex + i] = (float)motion;
-                  String log = F("AmbiMate: Motion in case statement: ");
-                  log += motion;
-                  addLog(LOG_LEVEL_INFO, log);              
-                motion = 0;
-                break;
-              }
-              case 4:
-              {
-                UserVar[event->BaseVarIndex + i] = (float)batVolts;
-                break;
-              }
-              case 5:
-              {
-                UserVar[event->BaseVarIndex + i] = (float)audio;
-                break;
-              }
-              case 6:
-              {
-                UserVar[event->BaseVarIndex + i] = (float)co2_ppm;
-                break;
-              }
-              case 7:
-              {
-                UserVar[event->BaseVarIndex + i] = (float)voc_ppm;
-                break;
-              }
-            }
-          }
-
-          success = true;
+          commTimer = millis();
+                String log = F("In PLUGIN_READ - WAITING");
+                addLog(LOG_LEVEL_INFO, log);            
+          sensorState = MS4_Poll_All;
+          success = false;
         }
+        else if ((sensorState == MS4_Read_PIR) || (sensorState == MS4_Read_All))
+        {
+          success = true;
+                String log = F("In PLUGIN_READ - READ at ");
+                log+=millis();
+                addLog(LOG_LEVEL_INFO, log);             
+          sensorState = MS4_Waiting;
+          stateTimer = millis();           
+        }    
 
         break;
       }
