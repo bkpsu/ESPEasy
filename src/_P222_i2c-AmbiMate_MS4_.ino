@@ -230,7 +230,7 @@ boolean Plugin_222(byte function, struct EventStruct *event, String& string)
                 addLog(LOG_LEVEL_INFO, log); 
               sensorState = MS4_Poll_PIR; // Go to POLL PIR
             }
-            sendData(event);
+            //sendData(event);
             break;
           }
           case MS4_Poll_PIR: // Poll PIR
